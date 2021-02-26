@@ -1,0 +1,9 @@
+#資料路徑要改成該電腦中要讀資料的位置，有5個地方要改
+#分別是：最一開始讀檔(train和test)的地方(2個)，以及在訓練時，會從檔案位置讀取圖片來訓練(3個)
+
+#有附上這次訓練好的model
+
+#在該檔案路徑下執行以下script
+>> python Lab2.py
+
+會在該路徑下產出output(category_submission.csv)
