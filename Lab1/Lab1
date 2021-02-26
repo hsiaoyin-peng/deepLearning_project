@@ -1,0 +1,305 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+# In[62]:
+
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split,cross_val_score
+from keras import metrics
+from keras import models 
+from keras import layers
+from keras import regularizers
+
+
+# In[63]:
+
+
+#讀取training/testing data
+train = pd.read_csv('./data/train.csv')
+test = pd.read_csv('./data/test.csv')
+train_test = pd.concat([train,test],sort=False)
+trainLength=len(train)
+testLength=len(test)
+print(trainLength)
+print(testLength)
+
+
+# In[64]:
+
+
+#價錢是要預測的值，當作label
+train_test.pop('SalePrice')
+train_labels = train.pop('SalePrice')
+
+
+# In[65]:
+
+
+train_test.dtypes.value_counts()
+
+
+# In[66]:
+
+
+#if 0 or na is more than half of data,then drop
+intData = train.select_dtypes(include=["int64"]).apply(pd.Series.nunique, axis = 0)
+dropData=[]
+halfTrainData = 730
+for col in train:
+    if train[col].dtype == 'int64' or train[col].dtype == 'float64' :
+        fliter = (train[col] == 0)
+        if train[fliter][col].count() > halfTrainData:
+            dropData.append(col)
+    elif train[col].dtype == 'object':
+        if train[col].isnull().sum() > halfTrainData:
+            dropData.append(col)
+print(dropData)
+
+
+# In[67]:
+
+
+# 結果發現 BsmtFinSF2 2ndFlrSF HalfBath PoolQC Fence MiscFeature BsmtFullBath BsmtHalfBath 是有可能為0的有意義資料 
+# 要移除的資料 MasVnrArea  LowQualFinSF WoodDeckSF EnclosedPorch 3SsnPorch ScreenPorch PoolArea MiscVal
+train_test.drop(['MasVnrArea', 'LowQualFinSF', 'WoodDeckSF', 'EnclosedPorch', '3SsnPorch', 'ScreenPorch', 'PoolArea', 'MiscVal'],axis=1, inplace=True)
+
+
+# In[68]:
+
+
+def transFormat(dataSet):    
+    
+    dataSet['MSZoning'] = dataSet['MSZoning'].fillna(dataSet['MSZoning'].mode()[0])
+    dataSet['LotFrontage'] = dataSet['LotFrontage'].fillna(dataSet['LotFrontage'].mean())
+    dataSet['LotArea'] = dataSet['LotArea'].fillna(dataSet['LotArea'].mean())
+    dataSet['Street'] = dataSet['Street'].fillna(dataSet['Street'].mode()[0])
+    dataSet['Alley'] = dataSet['Alley'].fillna('NOACCESS')
+    dataSet['LotShape'] = dataSet['LotShape'].fillna(dataSet['LotShape'].mode()[0])
+    dataSet['LandContour'] = dataSet['LandContour'].fillna(dataSet['LandContour'].mode()[0])
+    dataSet['Utilities'] = dataSet['Utilities'].fillna(dataSet['Utilities'].mode()[0])
+    dataSet['LotConfig'] = dataSet['LotConfig'].fillna(dataSet['LotConfig'].mode()[0])
+    dataSet['LandSlope'] = dataSet['LandSlope'].fillna(dataSet['LandSlope'].mode()[0])
+    dataSet['Neighborhood'] = dataSet['Neighborhood'].fillna(dataSet['Neighborhood'].mode()[0])
+    dataSet['Condition1'] = dataSet['Condition1'].fillna(dataSet['Condition1'].mode()[0])
+    dataSet['Condition2'] = dataSet['Condition2'].fillna(dataSet['Condition2'].mode()[0])
+    dataSet['BldgType'] = dataSet['BldgType'].fillna(dataSet['BldgType'].mode()[0])
+    dataSet['HouseStyle'] = dataSet['HouseStyle'].fillna(dataSet['HouseStyle'].mode()[0])
+    dataSet['HouseStyle'] = dataSet['HouseStyle'].fillna(dataSet['HouseStyle'].mode()[0])                                                                                             
+    dataSet['Exterior1st'] = dataSet['Exterior1st'].fillna(dataSet['Exterior1st'].mode()[0])
+    dataSet['Exterior2nd'] = dataSet['Exterior2nd'].fillna(dataSet['Exterior2nd'].mode()[0])
+    dataSet['MasVnrType'] = dataSet['MasVnrType'].fillna(dataSet['MasVnrType'].mode()[0])
+    dataSet['BsmtQual'] = dataSet['BsmtQual'].fillna('NoBasement')
+    dataSet['BsmtCond'] = dataSet['BsmtCond'].fillna('NoBasement')
+    dataSet['BsmtExposure'] = dataSet['BsmtExposure'].fillna('NoBasement')
+    dataSet['BsmtFinType1'] = dataSet['BsmtFinType1'].fillna('NoBasement')
+    dataSet['BsmtFinSF1'] = dataSet['BsmtFinSF1'].fillna(dataSet['BsmtFinSF1'].mode()[0])
+    dataSet['BsmtFinType2'] = dataSet['BsmtFinType2'].fillna('NoBasement')
+    dataSet['BsmtUnfSF'] = dataSet['BsmtUnfSF'].fillna(dataSet['BsmtUnfSF'].mode()[0])
+    dataSet['TotalBsmtSF'] = dataSet['TotalBsmtSF'].fillna(dataSet['TotalBsmtSF'].mode()[0])
+    dataSet['Electrical'] = dataSet['Electrical'].fillna(dataSet['Electrical'].mode()[0])
+    dataSet['FireplaceQu'] = dataSet['FireplaceQu'].fillna('NoFireplace')
+    dataSet['GarageType'] = dataSet['GarageType'].fillna('NoGarage')
+    dataSet['GarageYrBlt'] = dataSet['GarageYrBlt'].fillna(dataSet['GarageYrBlt'].mode()[0])
+    dataSet['GarageFinish'] = dataSet['GarageFinish'].fillna('NoGarage')
+    dataSet['GarageQual'] = dataSet['GarageQual'].fillna('NoGarage')
+    dataSet['GarageCond'] = dataSet['GarageCond'].fillna('NoGarage')
+    dataSet['PoolQC'] = dataSet['PoolQC'].fillna('NoPool')
+    dataSet['Fence'] = dataSet['Fence'].fillna('NoFence')
+    dataSet['MiscFeature'] = dataSet['MiscFeature'].fillna('None')
+    dataSet['Functional'] = dataSet['Functional'].fillna(dataSet['Functional'].mode()[0])
+    dataSet['GarageArea'] = dataSet['GarageArea'].fillna(dataSet['GarageArea'].mode()[0])
+    dataSet['GarageCars'] = dataSet['GarageCars'].fillna(dataSet['GarageCars'].mode()[0])
+    dataSet['KitchenQual'] = dataSet['KitchenQual'].fillna(dataSet['KitchenQual'].mode()[0])
+
+    dataSet['BsmtFinSF2'] = dataSet['BsmtFinSF2'].fillna(0)
+    
+    
+transFormat(train_test)
+
+
+# In[69]:
+
+
+#Numerical columns use log transformation
+log1p_col = ['LotFrontage','LotArea','BsmtFinSF1','BsmtFinSF2','TotalBsmtSF','1stFlrSF','BsmtUnfSF',
+            '2ndFlrSF','GrLivArea','GarageArea','OpenPorchSF']
+for col in log1p_col:
+    train_test[col] = train_test[col].apply(np.log1p)
+    
+#Calculate the building age and binning the age
+train_test['Building_age'] = train_test['YrSold'] - train_test['YearBuilt']
+for idx in train_test.loc[train_test.Building_age<0].index:
+    train_test.loc[idx, 'Building_age'] = 0
+train_test['Building_age_class'] = pd.cut(train_test['Building_age'], bins=14)
+train_test['Building_age'] = train_test['Building_age'].apply(np.log1p)
+
+#Calculate the age of the house after remodification and binning the age
+train_test['Remod_age'] = train_test['YrSold'] - train_test['YearRemodAdd']
+train_test['Remod_age_class'] = pd.cut(train_test['Remod_age'], bins=6)
+for idx in train_test.loc[train_test.Remod_age<0].index:
+    train_test.loc[idx, 'Remod_age'] = 0
+train_test['Remod_age'] = train_test['Remod_age'].apply(np.log1p)
+
+#Calculate the age of garage and binning the age
+train_test['GarageYrBlt_age'] = train_test['YrSold'] - train_test['GarageYrBlt']
+train_test['GarageYrBlt_age_class'] = pd.cut(train_test['GarageYrBlt_age'], bins=10)
+for idx in train_test.loc[train_test.GarageYrBlt_age<0].index:
+    train_test.loc[idx, 'GarageYrBlt_age'] = 0
+train_test['GarageYrBlt_age'] = train_test['GarageYrBlt_age'].apply(np.log1p)
+
+#Map the quality to different grade
+exter_qual = {'Ex':5, 'Gd':4, 'TA':3, 'Fa':2, 'Po':1,'Na':0,
+              'NoFireplace':0, 'NoGarage':0, 'NoPool':0}
+train_test['ExterQual'] = train_test['ExterQual'].map(exter_qual)
+train_test['ExterCond'] = train_test['ExterCond'].map(exter_qual)
+train_test['HeatingQC'] = train_test['HeatingQC'].map(exter_qual)
+train_test['KitchenQual'] = train_test['KitchenQual'].map(exter_qual)
+train_test['FireplaceQu'] = train_test['FireplaceQu'].map(exter_qual)
+train_test['GarageQual'] = train_test['GarageQual'].map(exter_qual)
+train_test['GarageCond'] = train_test['GarageCond'].map(exter_qual)
+train_test['PoolQC'] = train_test['PoolQC'].map(exter_qual)
+
+#Map the basement quality and condition
+bsmt_qual = {'Ex':5, 'Gd':4, 'TA':3, 'Fa':2, 'Po':1, 'NoBasement':0}
+train_test['BsmtQual'] = train_test['BsmtQual'].map(bsmt_qual)
+train_test['BsmtCond'] = train_test['BsmtCond'].map(bsmt_qual)
+
+#Map the basement exposure
+bsmtexposure_map = {'Gd':4, 'Av':3, 'Mn':2, 'No':1, 'NoBasement':0}
+train_test['BsmtExposure'] = train_test['BsmtExposure'].map(bsmtexposure_map)
+
+#Map the landslope to different grade
+slop_map = {'Gtl':3, 'Mod':2, 'Sev':1}
+train_test['LandSlope_class'] = train_test['LandSlope'].map(slop_map)
+
+#Mape the land contour to different class
+landcounter_map = {'Lvl':4, 'Bnk':3, 'HLS':2, 'Low':1}
+train_test['LandContour_class'] = train_test['LandContour'].map(landcounter_map)
+
+#Map the utilities to different level
+utilities_map = {'AllPub':4, 'NoSewr':3, 'NoSeWa':2, 'ELO':1}
+train_test['Utilities_class'] = train_test['Utilities'].map(utilities_map)
+train_test['Utilities_class'] = train_test['Utilities_class'].fillna(4)
+
+#Map the basement finish type to different level
+bsmt_FinType = {'GLQ':6, 'ALQ':5, 'BLQ':4, 'Rec':3, 'LwQ':2, 'Unf':1, 'NoBasement':0}
+train_test['BsmtFinType1'] = train_test['BsmtFinType1'].map(bsmt_FinType)
+train_test['BsmtFinType2'] = train_test['BsmtFinType2'].map(bsmt_FinType)
+
+#Map the fence to different level
+fence_qual = {'GdPrv':4, 'MnPrv':3, 'GdWo':2, 'MnWw':1, 'NoFence':0}
+train_test['Fence'] = train_test['Fence'].map(fence_qual)
+
+#Calculate the sum of condition
+condition_map = {'Artery':2, 'Feedr':2, 'Norm':1, 'RRNn':2, 'RRAn':2, 'PosN':2, 'PosA':2, 'RRNe':2, 'RRAe':2}
+train_test['ConditionSum'] = train_test['Condition2'].map(condition_map)
+
+#Map the garage finish situation to different level
+finish_map = {'Fin':3, 'RFn':2, 'Unf':1, 'NoGarage':0}
+train_test['GarageFinish_class'] = train_test['GarageFinish'].map(finish_map)
+
+# 有些欄位是數值，但是不是有大小關聯的關係，所以先轉成字串格式之後方邊做one hot encoding
+train_test['MSSubClass'] = train_test['MSSubClass'].astype('object')
+train_test['OverallQual'] = train_test['OverallQual'].astype('object')
+train_test['OverallCond'] = train_test['OverallCond'].astype('object')
+train_test['BsmtFullBath'] = train_test['BsmtFullBath'].astype('object')
+train_test['BsmtHalfBath'] = train_test['BsmtHalfBath'].astype('object')
+train_test['Fireplaces'] = train_test['Fireplaces'].astype('object')
+train_test['GarageCars'] = train_test['GarageCars'].astype('object')
+
+
+#Map the month to season
+season_map = {1:1,2:1,3:1,
+              4:2,5:2,6:2,
+             7:3,8:3,9:3,
+             10:4,11:4,12:4}
+train_test['SeasonSold'] = train_test['MoSold'].map(season_map)
+train_test.pop('MoSold')
+
+
+# In[70]:
+
+
+#one hot encoding
+train_test = pd.get_dummies(train_test)
+train=train_test.iloc[0:trainLength]
+test=train_test.iloc[trainLength:]
+
+
+# In[71]:
+
+
+x_train,x_test, y_train, y_test = train_test_split(train, train_labels,test_size = 0.33,random_state = 10)
+
+
+# In[72]:
+
+
+network = models.Sequential() 
+network.add(layers.Dense(200, activation='relu',kernel_regularizer=regularizers.l2(0.1), input_dim=x_train.shape[1])) 
+network.add(layers.Dense(100, activation='relu',kernel_regularizer=regularizers.l2(0.1)))
+network.add(layers.Dense(50, activation='relu',kernel_regularizer=regularizers.l2(0.05)))
+network.add(layers.Dense(25, activation='relu',kernel_regularizer=regularizers.l2(0.05)))
+network.add(layers.Dense(10, activation='relu',kernel_regularizer=regularizers.l2(0.05)))
+network.add(layers.Dense(1))
+network.compile(optimizer='adam', loss='mean_squared_error')
+
+
+# In[73]:
+
+
+history=network.fit(x_train, y_train,validation_data=(x_test,y_test), epochs=1000, batch_size=27)
+
+
+# In[74]:
+
+
+loss=network.evaluate(x_train,y_train,verbose=0)
+val_loss=network.evaluate(x_test,y_test,verbose=0)
+print("loss: %.2f" % np.sqrt(loss))
+print("validation loss: %.2f" % np.sqrt(val_loss))
+
+
+# In[75]:
+
+
+# summarize history for loss
+plt.plot(history.history['loss'])
+plt.plot(history.history['val_loss'])
+plt.title('model loss')
+plt.ylabel('loss')
+plt.xlabel('epoch')
+plt.legend(['train', 'test'], loc='upper left')
+plt.show()
+
+
+# In[76]:
+
+
+id_col = test['Id'].values.tolist()
+
+
+# In[77]:
+
+
+test
+
+
+# In[78]:
+
+
+prediction=network.predict(test)
+test_prediction = pd.DataFrame()
+test_prediction['Id'] = id_col
+test_prediction['SalePrice'] = prediction
+test_prediction.to_csv('submission.csv', index=False)
+
+
+# In[ ]:
+
+
+
+
