@@ -1,0 +1,10 @@
+資料路徑
+  -Lab1.py
+  -data
+     -train.csv
+     -test.csv
+
+在該檔案路徑下執行以下script
+>> python Lab1.py
+
+會在該路徑下產出output(submission.csv)
